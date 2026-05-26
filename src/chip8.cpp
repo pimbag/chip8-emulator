@@ -256,10 +256,10 @@ void Chip8::emu_cycle()
                     for (std::size_t i = 0; i <= x; ++i)
                         v_registers[i] = ram[index + i];
                     break;
-		default:
-		    std::cout << "Found unknown opcode: " << std::hex << opcode << '\n';
             }
             break;
+	default:
+		std::cout << "Found unknown opcode: " << std::hex << opcode << '\n';
     }
 
     pc += 2;

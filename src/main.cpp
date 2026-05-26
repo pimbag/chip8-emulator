@@ -65,10 +65,19 @@ int main(int argc, char* argv[]){
 	std::clog << "Created SDL Window\n";
 
 	SDL_Renderer* renderer = SDL_CreateRenderer(win, nullptr);
+	if (renderer == nullptr) {
+		SDL_Log("SDL Failed to create renderer: %s", SDL_GetError());
+		return 4;
+	}
 	SDL_SetRenderVSync(renderer, 1);
 	SDL_SetRenderLogicalPresentation(renderer, 64, 32, SDL_LOGICAL_PRESENTATION_INTEGER_SCALE);
 	
 	SDL_Texture* sdl_texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, 64, 32);
+	if (renderer == nullptr) {
+		SDL_Log("SDL Failed to create texture: %s", SDL_GetError());
+		return 5;
+	}
+
 	SDL_SetTextureScaleMode(
     		sdl_texture,
     		SDL_SCALEMODE_NEAREST
@@ -82,6 +91,11 @@ int main(int argc, char* argv[]){
 	Chip8 chip8 = Chip8();
 	
 	if (!chip8.load(argv[1])) {
+		SDL_DestroyTexture(sdl_texture);
+		SDL_DestroyRenderer(renderer);
+		SDL_DestroyWindow(win);
+		SDL_Quit();
+
 		std::cerr << "Failed to load ROM.\n";
 		return 3;
 	}
@@ -91,10 +105,12 @@ int main(int argc, char* argv[]){
 	auto last_timer  = std::chrono::steady_clock::now();
 	auto last_render = std::chrono::steady_clock::now();
 
-	while (true) {	
+	bool running = true;
+
+	while (running) {	
 		SDL_Event e;
 		while(SDL_PollEvent(&e)) {
-			if (e.type == SDL_EVENT_QUIT) return 0;
+			if (e.type == SDL_EVENT_QUIT) running = false;
 			if (e.type == SDL_EVENT_KEY_DOWN) {
 				for (std::size_t i = 0; i < 16; ++i) {
 					if (e.key.scancode == KeyMap[i]) {
@@ -104,7 +120,7 @@ int main(int argc, char* argv[]){
 			}
 			if (e.type == SDL_EVENT_KEY_UP) {
 				if (e.key.key == SDLK_F1) goto reload;
-
+				if (e.key.key == SDLK_ESCAPE) running = false;
 				if (e.key.key == SDLK_F2)
 				{
     					chip8.blocked = !chip8.blocked;
@@ -124,6 +140,8 @@ int main(int argc, char* argv[]){
 				}
 			}
 		}
+
+		if (!running) break;
 		
 		auto now = std::chrono::steady_clock::now();
 		while (now - last_cpu >= cpu_interval && !chip8.blocked) {
