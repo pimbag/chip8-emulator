@@ -39,7 +39,7 @@ constexpr SDL_Scancode KeyMap[16] = {
 
 int main(int argc, char* argv[]){
 	if (argc != 2) {
-		std::cerr << "Expected 2 arguments. ROM file must be provided.\n";
+		std::cerr << "Too many arguments. Usage: ./app <rom-file>\n";
 		return 1;
 	}
 	

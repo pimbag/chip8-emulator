@@ -18,7 +18,7 @@ bool Chip8::load(const std::filesystem::path& path)
 
 	const auto rom_size = std::filesystem::file_size(path);
 	if (rom_size > (ram.size() - program_start)) {
-		std::cerr << "ROM is too large compared to memory (" << rom_size << "b/4096b)\n";
+		std::cerr << "ROM is too large compared to available memory (" << rom_size << "b/3584b)\n";
 		return false;
 	}
 	
@@ -42,6 +42,7 @@ void Chip8::emu_cycle()
     uint8_t y    = (opcode & 0x00F0) >> 4;
     uint8_t n    =  opcode & 0x000F;
     uint8_t kk   =  opcode & 0x00FF;
+
     uint16_t nnn = opcode & 0x0FFF;
 
     switch (opcode & 0xF000)
