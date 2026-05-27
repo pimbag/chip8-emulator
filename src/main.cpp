@@ -59,6 +59,7 @@ int main(int argc, char* argv[]){
 	if (win == nullptr) {
 		SDL_Log("SDL Failed to create window: %s", SDL_GetError());
 		SDL_Quit();
+
 		return 2;
 	}
 
@@ -66,15 +67,22 @@ int main(int argc, char* argv[]){
 
 	SDL_Renderer* renderer = SDL_CreateRenderer(win, nullptr);
 	if (renderer == nullptr) {
+		SDL_DestroyWindow(win);
 		SDL_Log("SDL Failed to create renderer: %s", SDL_GetError());
+		SDL_Quit();
+
 		return 4;
 	}
+
 	SDL_SetRenderVSync(renderer, 1);
 	SDL_SetRenderLogicalPresentation(renderer, 64, 32, SDL_LOGICAL_PRESENTATION_INTEGER_SCALE);
 	
 	SDL_Texture* sdl_texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, 64, 32);
 	if (sdl_texture == nullptr) {
+		SDL_DestroyWindow(win);
 		SDL_Log("SDL Failed to create texture: %s", SDL_GetError());
+		SDL_Quit();
+
 		return 5;
 	}
 
