@@ -73,7 +73,7 @@ int main(int argc, char* argv[]){
 	SDL_SetRenderLogicalPresentation(renderer, 64, 32, SDL_LOGICAL_PRESENTATION_INTEGER_SCALE);
 	
 	SDL_Texture* sdl_texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, 64, 32);
-	if (renderer == nullptr) {
+	if (sdl_texture == nullptr) {
 		SDL_Log("SDL Failed to create texture: %s", SDL_GetError());
 		return 5;
 	}
