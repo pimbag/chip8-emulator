@@ -1,5 +1,6 @@
 #include <iostream>
 #include <chrono>
+#include <span>
 #include <SDL3/SDL.h>
 
 #include "chip8.h"
@@ -10,12 +11,8 @@ constexpr std::size_t height = 512;
 constexpr double cpu_hz   = 500.0;
 constexpr double timer_hz = 60.0;
 
-constexpr auto cpu_interval =
-    std::chrono::duration<double>(1.0 / cpu_hz);
-
-constexpr auto timer_interval =
-    std::chrono::duration<double>(1.0 / timer_hz);
-
+constexpr auto cpu_interval    = std::chrono::duration<double>(1.0 / cpu_hz);
+constexpr auto timer_interval  = std::chrono::duration<double>(1.0 / timer_hz);
 constexpr auto render_interval = timer_interval;
 
 constexpr SDL_Scancode KeyMap[16] = {
@@ -36,6 +33,25 @@ constexpr SDL_Scancode KeyMap[16] = {
     SDL_SCANCODE_F, // E
     SDL_SCANCODE_V  // F
 };
+
+void gen_audio(std::span<float> buffer, bool beep, float& phase)
+{
+	constexpr float frequency  = 500.0f;
+	constexpr float sampleRate = 48000.0f;
+	constexpr float amplitude  = 0.2f;
+
+	constexpr float increment  = frequency / sampleRate;
+
+	for (float& sample : buffer) {
+		sample = beep ? (phase < 0.5f ? amplitude : -amplitude) : 0.0f;
+		phase += increment;
+
+		if (phase >= 1.0f) phase -= 1.0f;
+	}
+		
+	phase += increment;
+	if (phase >= 1.0f) phase = 0.0f;
+}
 
 int main(int argc, char* argv[]){
 	if (argc != 2) {
@@ -93,6 +109,27 @@ int main(int argc, char* argv[]){
 	uint32_t pixels[2048];
 
 	std::clog << "Finished Creating SDL Texture & SDL Renderer\n";
+
+	SDL_AudioSpec spec{};
+	spec.freq     = 48000;
+	spec.format   = SDL_AUDIO_F32; // float 32
+	spec.channels = 1;
+
+	bool audio_enabled = true;
+
+	SDL_AudioStream* stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, nullptr, nullptr);
+	if (stream == nullptr) {
+		SDL_DestroyWindow(win);
+		SDL_Log("SDL Failed to create audio stream: %s", SDL_GetError());
+		SDL_Quit();
+
+		return 6;
+	}
+	
+	SDL_ResumeAudioStreamDevice(stream);
+
+	std::array<float, 1024> audioBuffer{};
+	float phase = 0.0f;
 	
 	reload:
 
@@ -102,6 +139,7 @@ int main(int argc, char* argv[]){
 		SDL_DestroyTexture(sdl_texture);
 		SDL_DestroyRenderer(renderer);
 		SDL_DestroyWindow(win);
+		SDL_DestroyAudioStream(stream);
 		SDL_Quit();
 
 		std::cerr << "Failed to load ROM.\n";
@@ -128,9 +166,7 @@ int main(int argc, char* argv[]){
 			}
 			if (e.type == SDL_EVENT_KEY_UP) {
 				if (e.key.key == SDLK_F1) goto reload;
-				if (e.key.key == SDLK_ESCAPE) running = false;
-				if (e.key.key == SDLK_F2)
-				{
+				if (e.key.key == SDLK_F2) {
     					chip8.blocked = !chip8.blocked;
 
     					if (!chip8.blocked)
@@ -140,6 +176,9 @@ int main(int argc, char* argv[]){
 						last_render = last_cpu;
     					}
 				}
+				if (e.key.key == SDLK_F3) audio_enabled = !audio_enabled;
+
+				if (e.key.key == SDLK_ESCAPE) running = false;
 
 				for (std::size_t i = 0; i < 16; ++i) {
 					if (e.key.scancode == KeyMap[i]) {
@@ -167,6 +206,12 @@ int main(int argc, char* argv[]){
 			}
 
 			last_timer += std::chrono::duration_cast<std::chrono::steady_clock::duration>(timer_interval);
+		}
+
+		if (SDL_GetAudioStreamQueued(stream) < 4096)
+		{
+			gen_audio(audioBuffer, chip8.sound_timer > 0 && !chip8.blocked && audio_enabled, phase);
+			SDL_PutAudioStreamData(stream, audioBuffer.data(), audioBuffer.size() * sizeof(float));
 		}
 
 		if (now - last_render >= render_interval) {
@@ -205,5 +250,6 @@ int main(int argc, char* argv[]){
 	SDL_DestroyTexture(sdl_texture);
 	SDL_DestroyRenderer(renderer);
 	SDL_DestroyWindow(win);
+	SDL_DestroyAudioStream(stream);
 	SDL_Quit();
 }
