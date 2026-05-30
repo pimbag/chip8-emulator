@@ -2,6 +2,7 @@
 #include <chrono>
 #include <span>
 #include <format>
+#include <memory>
 #include <SDL3/SDL.h>
 
 #include "chip8.h"
@@ -35,37 +36,37 @@ constexpr SDL_Scancode KeyMap[16] = {
     SDL_SCANCODE_V  // F
 };
 
+using WindowPtr   = std::unique_ptr<SDL_Window, decltype(&SDL_DestroyWindow)>;
+using RendererPtr = std::unique_ptr<SDL_Renderer, decltype(&SDL_DestroyRenderer)>;
+using TexturePtr  = std::unique_ptr<SDL_Texture, decltype(&SDL_DestroyTexture)>;
 class Window 
 {
 	private:
-		SDL_Window* win;
-		SDL_Renderer* renderer;
-		SDL_Texture* texture;
+		WindowPtr   win      {nullptr, SDL_DestroyWindow};
+		RendererPtr renderer {nullptr, SDL_DestroyRenderer};
+		TexturePtr  texture  {nullptr, SDL_DestroyTexture};
 
-		std::array<uint32_t, 2048> pixels;
+		std::array<uint32_t, 2048> pixels{};
 	public:
 		Window(const char* window_name)
 		{
-			win = SDL_CreateWindow(window_name, width, height, SDL_WINDOW_RESIZABLE);
-			if (win == nullptr) throw std::runtime_error( std::format("Failed to create SDL Window: {}", SDL_GetError()) );
+			win.reset(SDL_CreateWindow(window_name, width, height, SDL_WINDOW_RESIZABLE));
+			if (!win) throw std::runtime_error( std::format("Failed to create SDL Window: {}", SDL_GetError()) );
 			
-			renderer = SDL_CreateRenderer(win, nullptr);
-			if (renderer == nullptr) throw std::runtime_error( std::format("Failed to create SDL renderer: {}", SDL_GetError()) );
-			SDL_SetRenderVSync(renderer, 1);
-			SDL_SetRenderLogicalPresentation(renderer, 64, 32, SDL_LOGICAL_PRESENTATION_INTEGER_SCALE);
+			renderer.reset(SDL_CreateRenderer(win.get(), nullptr));
+			if (!renderer) throw std::runtime_error( std::format("Failed to create SDL renderer: {}", SDL_GetError()) );
+
+			SDL_SetRenderVSync(renderer.get(), 1);
+			SDL_SetRenderLogicalPresentation(renderer.get(), 64, 32, SDL_LOGICAL_PRESENTATION_INTEGER_SCALE);
 			
-			texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, 64, 32);
-			if (texture == nullptr) throw std::runtime_error( std::format("Failed to create SDL texture: {}", SDL_GetError()) );
-			SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_NEAREST);
+			texture.reset(SDL_CreateTexture(renderer.get(), SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, 64, 32));
+			if (!texture) throw std::runtime_error( std::format("Failed to create SDL texture: {}", SDL_GetError()) );
+
+			SDL_SetTextureScaleMode(texture.get(), SDL_SCALEMODE_NEAREST);
 		}
 
-		~Window()
-		{
-			SDL_DestroyWindow(win);
-			SDL_DestroyRenderer(renderer);
-			SDL_DestroyTexture(texture);
-			SDL_Quit();
-		}
+		Window(const Window&) noexcept            = delete;
+		Window& operator=(const Window&) noexcept = delete;
 
 		void render(const Chip8 &chip8)
 		{
@@ -76,12 +77,12 @@ class Window
 					: 0xFF000000; // BLACK
 			}
 
-			SDL_UpdateTexture(texture, nullptr, pixels.data(), 64 * sizeof(uint32_t));
+			SDL_UpdateTexture(texture.get(), nullptr, pixels.data(), 64 * sizeof(uint32_t));
 			
-			SDL_RenderClear(renderer);
-			SDL_RenderTexture(renderer, texture, nullptr, nullptr);
+			SDL_RenderClear(renderer.get());
+			SDL_RenderTexture(renderer.get(), texture.get(), nullptr, nullptr);
 
-			SDL_RenderPresent(renderer);
+			SDL_RenderPresent(renderer.get());
 		}
 };
 
@@ -100,14 +101,14 @@ void gen_audio(std::span<float> buffer, bool beep, float& phase)
 		if (phase >= 1.0f) phase -= 1.0f;
 	}
 		
-	phase += increment;
 	if (phase >= 1.0f) phase = 0.0f;
 }
 
+using AudioPtr = std::unique_ptr<SDL_AudioStream, decltype(&SDL_DestroyAudioStream)>;
 class Audio
 {
 	private:
-		SDL_AudioStream* stream;
+		AudioPtr stream{nullptr, SDL_DestroyAudioStream};
 		bool audio_enabled{true};
 
 		float phase{0.0f};
@@ -123,26 +124,44 @@ class Audio
 			spec.format   = SDL_AUDIO_F32;
 			spec.channels = 1;
 
-			stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, nullptr, nullptr);
-			if (stream == nullptr) throw std::runtime_error( std::format("Failed to create SDL Audio Stream: {}", SDL_GetError()) );
+			stream.reset(SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, nullptr, nullptr));
+			if (!stream) throw std::runtime_error( std::format("Failed to create SDL Audio Stream: {}", SDL_GetError()) );
 
-			SDL_ResumeAudioStreamDevice(stream);
+			SDL_ResumeAudioStreamDevice(stream.get());
 		}
 
-		~Audio()
-		{
-			SDL_DestroyAudioStream(stream);
-		}
+		Audio(const Audio&) noexcept            = delete;
+		Audio& operator=(const Audio&) noexcept = delete;
 
 		void check_audio(const Chip8 &chip8)
 		{
-			if (SDL_GetAudioStreamQueued(stream) < audio_chunk_bytes) {	
+			if (SDL_GetAudioStreamQueued(stream.get()) < audio_chunk_bytes) {	
 				gen_audio(audioBuffer, chip8.sound_timer > 0 && !chip8.blocked && audio_enabled, phase);
-				SDL_PutAudioStreamData(stream, audioBuffer.data(), audio_chunk_bytes);
+				SDL_PutAudioStreamData(stream.get(), audioBuffer.data(), audio_chunk_bytes);
 			}
 		}
 
 		void toggle_audio() {audio_enabled = not audio_enabled;}
+};
+
+struct SDLContext
+{
+	SDLContext() 
+	{
+		if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) {
+			throw std::runtime_error(
+				std::format("SDL Failed to initialize: {}", SDL_GetError())
+			);
+		}
+	}
+
+	~SDLContext() noexcept 
+	{
+		SDL_Quit();
+	}
+
+	SDLContext(const SDLContext&) noexcept            = delete;
+	SDLContext& operator=(const SDLContext&) noexcept = delete;
 };
 
 int main(int argc, char* argv[]){
@@ -150,11 +169,8 @@ int main(int argc, char* argv[]){
 		std::cerr << "Too many arguments. Usage: ./app <rom-file>\n";
 		return 1;
 	}
-	
-	if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) {
-		SDL_Log("SDL Initialization Error: %s", SDL_GetError());
-		return 1;
-	}
+
+	SDLContext context;
 
 	std::clog << "Initialized SDL\n";
 	
