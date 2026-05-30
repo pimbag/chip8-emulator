@@ -58,7 +58,7 @@ void Chip8::emu_cycle()
                     pc = stack[--sp];
                     break;
 		default:
-		    std::clog << "Unkown opcode: " << std::hex << opcode << "\n";
+		    std::clog << "Unknown opcode: " << std::hex << opcode << "\n";
             }
             break;
 
@@ -139,7 +139,7 @@ void Chip8::emu_cycle()
                     break;
 
 		default:
-			std::clog << "Unkown opcode: " << std::hex << opcode << "\n";
+			std::clog << "Unknown opcode: " << std::hex << opcode << "\n";
             }
             break;
 
@@ -197,12 +197,12 @@ void Chip8::emu_cycle()
                     if (keys[v_registers[x]]) pc += 2;
                     break;
 
-                case 0xA1: // EXA1 -- Skips one instruction if the current key being held down is NOT correspondant to the value of VY
+                case 0xA1: // EXA1 -- Skips one instruction if the current key being held down is NOT correspondant to the value of VX
                     if (!keys[v_registers[x]]) pc += 2;
                     break;
 
 		default:
-			std::clog << "Unkown opcode: " << std::hex << opcode << "\n";
+			std::clog << "Unknown opcode: " << std::hex << opcode << "\n";
             }
             break;
 
@@ -266,7 +266,7 @@ void Chip8::emu_cycle()
                     break;
 
 		default:
-			std::clog << "Unkown opcode: " << std::hex << opcode << "\n";
+			std::clog << "Unknown opcode: " << std::hex << opcode << "\n";
             }
             break;
 	default:

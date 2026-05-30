@@ -57,9 +57,9 @@ class Window
 			if (!renderer) throw std::runtime_error( std::format("Failed to create SDL renderer: {}", SDL_GetError()) );
 
 			SDL_SetRenderVSync(renderer.get(), 1);
-			SDL_SetRenderLogicalPresentation(renderer.get(), 64, 32, SDL_LOGICAL_PRESENTATION_INTEGER_SCALE);
+			SDL_SetRenderLogicalPresentation(renderer.get(), DisplayWidth, DisplayHeight, SDL_LOGICAL_PRESENTATION_INTEGER_SCALE);
 			
-			texture.reset(SDL_CreateTexture(renderer.get(), SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, 64, 32));
+			texture.reset(SDL_CreateTexture(renderer.get(), SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, DisplayWidth, DisplayHeight));
 			if (!texture) throw std::runtime_error( std::format("Failed to create SDL texture: {}", SDL_GetError()) );
 
 			SDL_SetTextureScaleMode(texture.get(), SDL_SCALEMODE_NEAREST);
@@ -77,7 +77,7 @@ class Window
 					: 0xFF000000; // BLACK
 			}
 
-			SDL_UpdateTexture(texture.get(), nullptr, pixels.data(), 64 * sizeof(uint32_t));
+			SDL_UpdateTexture(texture.get(), nullptr, pixels.data(), DisplayWidth * sizeof(uint32_t));
 			
 			SDL_RenderClear(renderer.get());
 			SDL_RenderTexture(renderer.get(), texture.get(), nullptr, nullptr);
@@ -166,7 +166,7 @@ struct SDLContext
 
 int main(int argc, char* argv[]){
 	if (argc != 2) {
-		std::cerr << "Too many arguments. Usage: ./app <rom-file>\n";
+		std::cerr << "Incorrect usage. Usage: ./app <path-to-rom-file>";
 		return 1;
 	}
 
