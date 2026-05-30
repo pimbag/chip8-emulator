@@ -1,6 +1,7 @@
 #include <iostream>
 #include <chrono>
 #include <span>
+#include <format>
 #include <SDL3/SDL.h>
 
 #include "chip8.h"
@@ -34,6 +35,56 @@ constexpr SDL_Scancode KeyMap[16] = {
     SDL_SCANCODE_V  // F
 };
 
+class Window 
+{
+	private:
+		SDL_Window* win;
+		SDL_Renderer* renderer;
+		SDL_Texture* texture;
+
+		std::array<uint32_t, 2048> pixels;
+	public:
+		Window(const char* window_name)
+		{
+			win = SDL_CreateWindow(window_name, width, height, SDL_WINDOW_RESIZABLE);
+			if (win == nullptr) throw std::runtime_error( std::format("Failed to create SDL Window: {}", SDL_GetError()) );
+			
+			renderer = SDL_CreateRenderer(win, nullptr);
+			if (renderer == nullptr) throw std::runtime_error( std::format("Failed to create SDL renderer: {}", SDL_GetError()) );
+			SDL_SetRenderVSync(renderer, 1);
+			SDL_SetRenderLogicalPresentation(renderer, 64, 32, SDL_LOGICAL_PRESENTATION_INTEGER_SCALE);
+			
+			texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, 64, 32);
+			if (texture == nullptr) throw std::runtime_error( std::format("Failed to create SDL texture: {}", SDL_GetError()) );
+			SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_NEAREST);
+		}
+
+		~Window()
+		{
+			SDL_DestroyWindow(win);
+			SDL_DestroyRenderer(renderer);
+			SDL_DestroyTexture(texture);
+			SDL_Quit();
+		}
+
+		void render(const Chip8 &chip8)
+		{
+			for (std::size_t i = 0; i < pixels.size(); ++i) {
+				bool px = chip8.graphics[i];
+				pixels[i] = px 
+					? 0xFFFFFFFF  // WHITE
+					: 0xFF000000; // BLACK
+			}
+
+			SDL_UpdateTexture(texture, nullptr, pixels.data(), 64 * sizeof(uint32_t));
+			
+			SDL_RenderClear(renderer);
+			SDL_RenderTexture(renderer, texture, nullptr, nullptr);
+
+			SDL_RenderPresent(renderer);
+		}
+};
+
 void gen_audio(std::span<float> buffer, bool beep, float& phase)
 {
 	constexpr float frequency  = 500.0f;
@@ -53,6 +104,47 @@ void gen_audio(std::span<float> buffer, bool beep, float& phase)
 	if (phase >= 1.0f) phase = 0.0f;
 }
 
+class Audio
+{
+	private:
+		SDL_AudioStream* stream;
+		bool audio_enabled{true};
+
+		float phase{0.0f};
+		std::array<float, 1024> audioBuffer{};
+	public:
+		static constexpr std::size_t sample_rate       = 48000;
+		static constexpr std::size_t audio_chunk_bytes = sizeof(float) * 1024;
+		
+		Audio() 
+		{
+			SDL_AudioSpec spec{};
+			spec.freq     = sample_rate;
+			spec.format   = SDL_AUDIO_F32;
+			spec.channels = 1;
+
+			stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, nullptr, nullptr);
+			if (stream == nullptr) throw std::runtime_error( std::format("Failed to create SDL Audio Stream: {}", SDL_GetError()) );
+
+			SDL_ResumeAudioStreamDevice(stream);
+		}
+
+		~Audio()
+		{
+			SDL_DestroyAudioStream(stream);
+		}
+
+		void check_audio(const Chip8 &chip8)
+		{
+			if (SDL_GetAudioStreamQueued(stream) < audio_chunk_bytes) {	
+				gen_audio(audioBuffer, chip8.sound_timer > 0 && !chip8.blocked && audio_enabled, phase);
+				SDL_PutAudioStreamData(stream, audioBuffer.data(), audio_chunk_bytes);
+			}
+		}
+
+		void toggle_audio() {audio_enabled = not audio_enabled;}
+};
+
 int main(int argc, char* argv[]){
 	if (argc != 2) {
 		std::cerr << "Too many arguments. Usage: ./app <rom-file>\n";
@@ -65,83 +157,15 @@ int main(int argc, char* argv[]){
 	}
 
 	std::clog << "Initialized SDL\n";
-
-	SDL_Window* win = SDL_CreateWindow(
-		argv[1],
-		width,
-		height,
-		SDL_WINDOW_RESIZABLE
-	);
-	if (win == nullptr) {
-		SDL_Log("SDL Failed to create window: %s", SDL_GetError());
-		SDL_Quit();
-
-		return 2;
-	}
-
-	std::clog << "Created SDL Window\n";
-
-	SDL_Renderer* renderer = SDL_CreateRenderer(win, nullptr);
-	if (renderer == nullptr) {
-		SDL_DestroyWindow(win);
-		SDL_Log("SDL Failed to create renderer: %s", SDL_GetError());
-		SDL_Quit();
-
-		return 4;
-	}
-
-	SDL_SetRenderVSync(renderer, 1);
-	SDL_SetRenderLogicalPresentation(renderer, 64, 32, SDL_LOGICAL_PRESENTATION_INTEGER_SCALE);
 	
-	SDL_Texture* sdl_texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, 64, 32);
-	if (sdl_texture == nullptr) {
-		SDL_DestroyWindow(win);
-		SDL_Log("SDL Failed to create texture: %s", SDL_GetError());
-		SDL_Quit();
+	Window win(argv[1]);
+	Audio audio{};
 
-		return 5;
-	}
-
-	SDL_SetTextureScaleMode(
-    		sdl_texture,
-    		SDL_SCALEMODE_NEAREST
-	);
-	uint32_t pixels[2048];
-
-	std::clog << "Finished Creating SDL Texture & SDL Renderer\n";
-
-	SDL_AudioSpec spec{};
-	spec.freq     = 48000;
-	spec.format   = SDL_AUDIO_F32; // float 32
-	spec.channels = 1;
-
-	bool audio_enabled = true;
-
-	SDL_AudioStream* stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, nullptr, nullptr);
-	if (stream == nullptr) {
-		SDL_DestroyWindow(win);
-		SDL_Log("SDL Failed to create audio stream: %s", SDL_GetError());
-		SDL_Quit();
-
-		return 6;
-	}
-	
-	SDL_ResumeAudioStreamDevice(stream);
-
-	std::array<float, 1024> audioBuffer{};
-	float phase = 0.0f;
-	
 	reload:
 
 	Chip8 chip8 = Chip8();
 	
 	if (!chip8.load(argv[1])) {
-		SDL_DestroyTexture(sdl_texture);
-		SDL_DestroyRenderer(renderer);
-		SDL_DestroyWindow(win);
-		SDL_DestroyAudioStream(stream);
-		SDL_Quit();
-
 		std::cerr << "Failed to load ROM.\n";
 		return 3;
 	}
@@ -176,7 +200,7 @@ int main(int argc, char* argv[]){
 						last_render = last_cpu;
     					}
 				}
-				if (e.key.key == SDLK_F3) audio_enabled = !audio_enabled;
+				if (e.key.key == SDLK_F3) audio.toggle_audio();
 
 				if (e.key.key == SDLK_ESCAPE) running = false;
 
@@ -196,6 +220,8 @@ int main(int argc, char* argv[]){
 			last_cpu += std::chrono::duration_cast<std::chrono::steady_clock::duration>(cpu_interval);
 		}
 
+		audio.check_audio(chip8);
+
 		while (now - last_timer >= timer_interval && !chip8.blocked) {
 			if (chip8.delay_timer > 0) {
 				--chip8.delay_timer;
@@ -206,50 +232,16 @@ int main(int argc, char* argv[]){
 			}
 
 			last_timer += std::chrono::duration_cast<std::chrono::steady_clock::duration>(timer_interval);
-		}
-
-		if (SDL_GetAudioStreamQueued(stream) < 4096)
-		{
-			gen_audio(audioBuffer, chip8.sound_timer > 0 && !chip8.blocked && audio_enabled, phase);
-			SDL_PutAudioStreamData(stream, audioBuffer.data(), audioBuffer.size() * sizeof(float));
-		}
+		}	
 
 		if (now - last_render >= render_interval) {
 			last_render += std::chrono::duration_cast<std::chrono::steady_clock::duration>(render_interval);
 			if (!chip8.draw) continue;
 			chip8.draw = false;
 
-			for (std::size_t i = 0; i < 2048; ++i) {
-				bool px = chip8.graphics[i];
-				pixels[i] = px
-					? 0xFFFFFFFF   // WHITE
-					: 0xFF000000;  // BLACK
-			}
-
-			SDL_UpdateTexture(
-				sdl_texture,
-				nullptr,
-				pixels,
-				64 * sizeof(uint32_t)
-			);
-			SDL_RenderClear(renderer);
-
-			SDL_RenderTexture(
-				renderer,
-				sdl_texture,
-				nullptr,
-				nullptr
-			);
-
-			SDL_RenderPresent(renderer);	
+			win.render(chip8);
 		}
 
 		SDL_Delay(1);
 	}
-
-	SDL_DestroyTexture(sdl_texture);
-	SDL_DestroyRenderer(renderer);
-	SDL_DestroyWindow(win);
-	SDL_DestroyAudioStream(stream);
-	SDL_Quit();
 }
