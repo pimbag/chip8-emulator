@@ -10,7 +10,8 @@ Built mostly as a learning project to explore emulation, SDL and timing systems.
 - SDL3 renderer
 - keyboard input
 - fixed timing system (CPU 500 Hz, Rendering 60 Hz)
-- pause/reload support (as of now)
+- audio
+- pause/reload/turning off audio support (as of now)
 
 ## Controls
 
@@ -24,6 +25,7 @@ Built mostly as a learning project to explore emulation, SDL and timing systems.
 Additionally:
 - `F1` - Reloads ROM & CHIP-8
 - `F2` - Pause emulator (Note: In games that render movement a lot for example pong during a "blink" this may cause some sprites to be not rendered)
+- `F3` - Disable/Re-enable audio
 
 ## Building
 
