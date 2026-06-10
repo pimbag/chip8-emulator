@@ -34,6 +34,12 @@ constexpr std::size_t index_pixel(uint8_t x, uint8_t y)
 	return y * DisplayWidth + x;
 }
 
+struct Settings {
+	bool shift_uses_vy    = false; // 8XY6 and 8XYE
+	bool jump_uses_vx     = false; // BNNN
+	bool load_store_inc_i = false; // FX55 FX65
+};
+
 class Chip8
 {
 	private:
@@ -48,6 +54,7 @@ class Chip8
 	public:
 		std::array<bool, DisplaySize> graphics; // 64x32 display monochrome (black or white)
 		std::array<bool, 16> keys;		// Pressed/Not pressed
+		Settings settings;
 	
 		uint8_t sound_timer{0};
 		uint8_t	delay_timer{0};

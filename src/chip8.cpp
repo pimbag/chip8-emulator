@@ -125,6 +125,10 @@ void Chip8::emu_cycle()
 
                 case 0x6: // 8XY6 -- VX is set to the value of the right shift bitwise operation on VX and VY [Potential Flag]
                     v_registers[0xF] = v_registers[x] & 0x01;
+		    if (settings.shift_uses_vy == true) {
+			v_registers[x] = v_registers[y];
+		    }
+
                     v_registers[x] >>= 1;
                     break;
 
@@ -152,7 +156,7 @@ void Chip8::emu_cycle()
             break;
 
         case 0xB000: // BNNN -- Jumps to the instruction at NNN with an offset of V0
-            pc = nnn + v_registers[0] - 2;
+            pc = nnn + v_registers[settings.jump_uses_vx ? x : 0] - 2;
             break;
 
         case 0xC000: // CXNN -- Generates a random number in VX
@@ -258,11 +262,19 @@ void Chip8::emu_cycle()
                 case 0x55: // FX55 -- Stores memory from V0 to VX starting at the index pointer in the memory
                     for (std::size_t i = 0; i <= x; ++i)
                         ram[index + i] = v_registers[i];
+
+		    if (settings.load_store_inc_i == true) {
+			index = index + x + 1;
+		    }
                     break;
 
                 case 0x65: // FX65 -- Loads memory starting from the index pointer in the memory into V0 to VX
                     for (std::size_t i = 0; i <= x; ++i)
                         v_registers[i] = ram[index + i];
+
+		    if (settings.load_store_inc_i == true) {
+			index = index + x + 1;
+		    }
                     break;
 
 		default:

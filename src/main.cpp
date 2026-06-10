@@ -3,6 +3,7 @@
 #include <span>
 #include <format>
 #include <memory>
+#include <fstream>
 #include <SDL3/SDL.h>
 
 #include "chip8.h"
@@ -164,15 +165,58 @@ struct SDLContext
 	SDLContext& operator=(const SDLContext&) noexcept = delete;
 };
 
+void save_chip8_state(const std::string& current_path, Chip8& chip8)
+{
+	std::ofstream file(current_path, std::ios::binary);
+	if (!file) {
+		std::clog << "Failed to open file: " << current_path << std::endl;
+	}
+	file.write(reinterpret_cast<char*>(&chip8), sizeof(Chip8));
+
+	std::cout << std::format("Saved Chip8 state to: {}\n", current_path);
+
+	file.close();
+}
+
+void load_chip8_state(const std::string& current_path, Chip8& chip8)
+{
+	std::ifstream file(current_path, std::ios::binary);
+	if (!file) {
+		std::clog << "Failed to open file: " << current_path << std::endl;
+	}
+	file.read(reinterpret_cast<char*>(&chip8), sizeof(Chip8));
+
+	file.close();
+}
+
 int main(int argc, char* argv[]){
-	if (argc != 2) {
-		std::cerr << "Incorrect usage. Usage: ./app <path-to-rom-file>";
+	if (argc < 2) {
+		std::cerr << "Incorrect usage. Usage: ./app <path-to-rom-file> [options]";
 		return 1;
 	}
 
-	SDLContext context;
+	Settings setup;
+	const std::string prefix = "--save-path=";
+	std::string save_path = "savefile";
 
-	std::clog << "Initialized SDL\n";
+	for (std::size_t i = 2; i < argc; ++i) {
+		std::string arg = argv[i];
+		if (arg == "--shift-uses-vy") {
+			setup.shift_uses_vy    = true;
+		} 
+		else if (arg == "--jump-uses-vx") {
+			setup.jump_uses_vx     = true;
+		}
+		else if (arg == "--load-store-inc-i") {
+			setup.load_store_inc_i = true;
+		}
+		else if (arg.starts_with(prefix)) {
+			std::string path = arg.substr(prefix.size());
+			save_path = path;
+		}
+	}
+
+	SDLContext context;
 	
 	Window win(argv[1]);
 	Audio audio{};
@@ -180,12 +224,15 @@ int main(int argc, char* argv[]){
 	reload:
 
 	Chip8 chip8 = Chip8();
+	chip8.settings = setup;
 	
 	if (!chip8.load(argv[1])) {
 		std::cerr << "Failed to load ROM.\n";
 		return 3;
 	}
 	std::clog << "Loaded ROM: " << argv[1] << "\n";
+
+	load:
 
 	auto last_cpu    = std::chrono::steady_clock::now();
 	auto last_timer  = std::chrono::steady_clock::now();
@@ -205,20 +252,33 @@ int main(int argc, char* argv[]){
 				}
 			}
 			if (e.type == SDL_EVENT_KEY_UP) {
-				if (e.key.key == SDLK_F1) goto reload;
-				if (e.key.key == SDLK_F2) {
-    					chip8.blocked = !chip8.blocked;
+				switch(e.key.key) {
+					case SDLK_F1:
+						goto reload;
+					case SDLK_SPACE:
+						chip8.blocked = !chip8.blocked;
+						if (!chip8.blocked)
+    						{
+        						last_cpu    = std::chrono::steady_clock::now();
+        						last_timer  = last_cpu;
+							last_render = last_cpu;
+    						}
+						
+						break;
+					case SDLK_M:
+						audio.toggle_audio();
+						break;
+					case SDLK_F5:
+						save_chip8_state(save_path, chip8);
+						break;
+					case SDLK_F9:
+						load_chip8_state(save_path, chip8);
+						break;
+					case SDLK_ESCAPE:
+						running = false;
+						break;
 
-    					if (!chip8.blocked)
-    					{
-        					last_cpu    = std::chrono::steady_clock::now();
-        					last_timer  = last_cpu;
-						last_render = last_cpu;
-    					}
 				}
-				if (e.key.key == SDLK_F3) audio.toggle_audio();
-
-				if (e.key.key == SDLK_ESCAPE) running = false;
 
 				for (std::size_t i = 0; i < 16; ++i) {
 					if (e.key.scancode == KeyMap[i]) {
