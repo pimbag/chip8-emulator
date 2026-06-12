@@ -11,7 +11,9 @@ Built mostly as a learning project to explore emulation, SDL and timing systems.
 - keyboard input
 - fixed timing system (CPU 500 Hz, Rendering 60 Hz)
 - audio
-- pause/reload/turning off audio support (as of now)
+- reloading rom
+- pausing and muting audio support
+- save and load state support
 
 ## Controls
 
@@ -24,8 +26,10 @@ Built mostly as a learning project to explore emulation, SDL and timing systems.
 
 Additionally:
 - `F1` - Reloads ROM & CHIP-8
-- `F2` - Pause emulator (Note: In games that render movement a lot for example pong during a "blink" this may cause some sprites to be not rendered)
-- `F3` - Disable/Re-enable audio
+- `F5` - Save current state
+- `F9` - Load past state
+- `Space` - Pause emulator (Note: In games that render movement a lot for example pong during a "blink" this may cause some sprites to be not rendered)
+- `M` - Disable/Re-enable audio
 
 ## Building
 
@@ -49,6 +53,24 @@ make
 ```bash
 ./app <path-to-rom>
 ```
+
+## Command Line Arguments
+
+### Save Path
+
+Overrides the default save-state location.
+
+```bash
+./app <path-to-rom> --save-path=<path>
+```
+
+### Quirks
+
+```bash
+./app <path-to-rom> --shift--uses-vy --jump-uses-vx --load-store-inc-i
+```
+
+**All of these are optional arguments**
 
 ## Screenshots
 
