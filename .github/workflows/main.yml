@@ -1,22 +1,39 @@
-name: Linux Build
+name: Build
 
 on:
   workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@v4
 
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+
       - name: Install SDL3
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libsdl3-dev
+        run: vcpkg install sdl3
 
       - name: Configure
-        run: cmake -B build
+        run: >
+          cmake -B build
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake
 
       - name: Build
-        run: cmake --build build
+        run: cmake --build build --config Release
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: chip8-${{ matrix.os }}
+          path: build
