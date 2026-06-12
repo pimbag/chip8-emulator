@@ -139,6 +139,10 @@ void Chip8::emu_cycle()
 
                 case 0xE: // 8XYE -- VX is set to the value of the left shift bitwise operation on VX and VY [Potential Flag]
                     v_registers[0xF] = (v_registers[x] & 0x80) >> 7;
+		    if (settings.shift_uses_vy == true) {
+			v_registers[x] = v_registers[y];
+		    }
+
                     v_registers[x] <<= 1;
                     break;
 

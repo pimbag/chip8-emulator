@@ -67,7 +67,7 @@ Overrides the default save-state location.
 ### Quirks
 
 ```bash
-./app <path-to-rom> --shift--uses-vy --jump-uses-vx --load-store-inc-i
+./app <path-to-rom> --shift-uses-vy --jump-uses-vx --load-store-inc-i
 ```
 
 **All of these are optional arguments**
